@@ -1,20 +1,31 @@
-const express = require('express');
+const express = require("express");
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.get('/status', (req, res) => {
+app.get("/status", (req, res) => {
   res.json({
-    status: 'ok',
+    status: "ok",
     timestamp: new Date().toISOString()
   });
 });
 
-app.get('/', (req, res) => {
-  res.send('First Pipeline Challenge - Week 4');
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    service: "first-pipeline",
+    healthy: true,
+    uptimeSeconds: Math.floor(process.uptime())
+  });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.get("/", (req, res) => {
+  res.send("First Pipeline Challenge - Week 4");
 });
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
 
 module.exports = app;

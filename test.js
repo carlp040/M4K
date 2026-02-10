@@ -1,48 +1,54 @@
-const http = require('http');
+const http = require("http");
+const app = require("./index.js");
 
-function test() {
-  const options = {
-    hostname: 'localhost',
-    port: 3000,
-    path: '/status',
-    method: 'GET'
-  };
-
-  console.log('Running tests...');
-
-  const req = http.request(options, (res) => {
-    let data = '';
-    res.on('data', (chunk) => { data += chunk; });
-    res.on('end', () => {
-      try {
-        const json = JSON.parse(data);
-        if (json.status === 'ok') {
-          console.log('✓ Status endpoint test passed');
-          process.exit(0);
-        } else {
-          console.log('✗ Status endpoint returned wrong data');
-          process.exit(1);
-        }
-      } catch (e) {
-        console.log('✗ Invalid JSON response');
-        process.exit(1);
+function requestStatus() {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        hostname: "localhost",
+        port: 3000,
+        path: "/status",
+        method: "GET"
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => {
+          data += chunk;
+        });
+        res.on("end", () => resolve({ statusCode: res.statusCode, data }));
       }
-    });
-  });
+    );
 
-  req.on('error', (e) => {
-    console.log('✗ Connection failed:', e.message);
-    process.exit(1);
+    req.on("error", reject);
+    req.end();
   });
-
-  req.end();
 }
 
-// Start server, run test, then exit
-const app = require('./index.js');
-const server = app.listen(3000, () => {
-  setTimeout(() => {
-    test();
-    setTimeout(() => server.close(), 1000);
-  }, 500);
-});
+async function run() {
+  console.log("Running tests...");
+
+  const server = app.listen(3000);
+
+  try {
+    const { statusCode, data } = await requestStatus();
+    const json = JSON.parse(data);
+
+    if (statusCode !== 200) {
+      throw new Error(`Expected HTTP 200, got ${statusCode}`);
+    }
+    if (json.status !== "ok") {
+      throw new Error("Status endpoint returned wrong payload");
+    }
+    if (!json.timestamp) {
+      throw new Error("Missing timestamp in response");
+    }
+
+    console.log("PASS: Status endpoint test passed");
+    server.close(() => process.exit(0));
+  } catch (error) {
+    console.error(`FAIL: Test failed: ${error.message}`);
+    server.close(() => process.exit(1));
+  }
+}
+
+run();
