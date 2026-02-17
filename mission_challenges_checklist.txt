@@ -1,0 +1,128 @@
+BOILER ROOM WEEK 4 - CHALLENGES + SECRETS CHECKLIST
+====================================================
+
+Repository:
+- https://github.com/PalmChas/M4K-Pipeline
+
+Deployment:
+- https://m4k-pipeline-production.up.railway.app
+
+
+1) CORE CHALLENGE (MUST HAVE)
+-----------------------------
+[ ] GitHub Actions workflow runs on every push
+[ ] Automated test step exists and runs in CI
+[ ] Docker image build step exists in CI
+[ ] Trivy security scan runs in CI
+[ ] App deployed to live URL (Railway/Render/Fly)
+[ ] CI status badge shown in README
+
+
+2) BRONZE / SILVER / GOLD CHECKLIST
+-----------------------------------
+
+BRONZE (Minimum):
+[ ] Code pushed to GitHub
+[ ] Workflow file exists
+[ ] Tests run (even if failing)
+[ ] Docker image builds
+
+SILVER (Production Ready):
+[ ] Everything in Bronze
+[ ] All tests passing (green)
+[ ] Trivy scan completes
+[ ] Live app deployed and reachable
+[ ] CI badge in README is green
+[ ] Can curl deployed app successfully
+
+GOLD (DevOps Excellence):
+[ ] Everything in Silver
+[ ] Automated deployment on merge to main
+[ ] Custom health endpoint exists
+[ ] Performance metrics endpoint or metrics tracking
+[ ] README explains architecture
+[ ] At least 1 level-up challenge completed
+
+
+3) LEVEL-UP CHALLENGES (OPTIONAL)
+---------------------------------
+
+Challenge 1 - Multi-environment deploy:
+[ ] Staging environment
+[ ] Production environment
+[ ] Staging auto-deploy on PR
+[ ] Production deploy on merge to main
+
+Challenge 2 - Performance metrics:
+[ ] /metrics endpoint exists
+[ ] Request count tracked
+[ ] Response time tracked
+[ ] Metrics documented in README
+
+Challenge 3 - Slack notifications:
+[ ] Notify on successful deploy
+[ ] Notify on pipeline failure
+[ ] Include commit message + author
+
+Challenge 4 - Custom health checks:
+[ ] /health endpoint returns detailed checks
+[ ] DB check included (if DB exists)
+[ ] External dependency checks included
+[ ] Proper HTTP status codes used
+
+
+4) SECRET CHALLENGES
+--------------------
+
+Secret #1 - Easter Egg:
+[ ] Hidden endpoint added (example: /secret or /coffee)
+[ ] Fun response from hidden endpoint
+[ ] Hidden hint in README (for careful readers)
+
+Secret #2 - Pipeline Art:
+[ ] CI outputs ASCII art when tests pass
+[ ] Workflow step names include fun custom emojis/icons
+
+Secret #3 - README Challenge:
+[ ] ASCII art banner
+[ ] Architecture diagram (Mermaid or ASCII)
+[ ] GIF of pipeline running
+[ ] Team member bios
+[ ] Future Plans section with creative ideas
+
+Secret #4 - Speed Run:
+[ ] Completed full challenge under 90 minutes
+[ ] Start and finish times documented in README
+[ ] Evidence/screenshots included
+
+Secret #5 - Plot Twist:
+[ ] Rebuild in alternative stack (Flask/Gin/Actix/Oak)
+[ ] Tests still exist
+[ ] Docker still exists
+[ ] Trivy still exists
+[ ] Deployment still works
+
+
+5) SUBMISSION PACKAGE
+---------------------
+[ ] Team name
+[ ] Team members
+[ ] GitHub repo URL
+[ ] Deployed app URL
+[ ] Screenshot of pipeline (green or in-progress debug)
+[ ] Screenshot of deployed app
+
+Optional proof:
+[ ] Trivy screenshot
+[ ] Architecture diagram screenshot
+[ ] GIF of pipeline run
+[ ] Easter egg screenshots
+
+
+6) QUICK FINAL VERIFICATION COMMANDS
+------------------------------------
+npm test
+docker build -t first-pipeline .
+curl https://m4k-pipeline-production.up.railway.app/status
+curl https://m4k-pipeline-production.up.railway.app/health
+curl https://m4k-pipeline-production.up.railway.app/secret

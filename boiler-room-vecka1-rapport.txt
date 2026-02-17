@@ -1,0 +1,34 @@
+Boiler Room – Vecka 4
+
+Team: M4K Gang
+Datum: 2026-02-10
+
+Deltagare:
+ • Mattej
+ • Oskar
+ • Carl
+ • Jonny
+ • Julia
+
+
+🔧 Arbete
+• Satt upp CI/CD med test, Docker-build och Trivy-scan i GitHub Actions.
+• Deployat appen till Railway och uppdaterat README + startsida med checklista.
+
+⚠️ Hinder
+• Push-konflikter vid synk mellan lokal branch och remote.
+• Trivy varning på Dockerfile (container körde som root).
+
+✅ Lösningar
+• Löste merge-konflikter och slutförde merge-commit innan ny push.
+• Uppdaterade Dockerfile till icke-root (`USER node`) och verifierade med ny scan.
+
+📊 Status
+ 🟢 På spår
+ 🟡 Lite efter
+ 🔴 Behöver hjälp
+Aktuell status: 🟢 På spår
+
+⏭️ Nästa steg
+• Samla screenshots för inlämning (pipeline, deploy, Trivy).
+• Slutvalidera secrets/environments för staging och production deploy.

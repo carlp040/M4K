@@ -10,7 +10,8 @@ permissions:
   security-events: write
 
 jobs:
-  build-test-scan-deploy:
+  ci:
+    name: Build Test Scan
     runs-on: ubuntu-latest
 
     steps:
@@ -28,6 +29,19 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: Pipeline Art
+        if: ${{ success() }}
+        run: |
+          cat <<'EOF'
+            ____  _            _ _
+           |  _ \(_)_ __   ___| (_)_ __   ___
+           | |_) | | '_ \ / _ \ | | '_ \ / _ \
+           |  __/| | |_) |  __/ | | | | |  __/
+           |_|   |_| .__/ \___|_|_|_| |_|\___|
+                    |_|
+          EOF
+          echo "Tests passed. Ready to deploy."
 
       - name: Build Docker image
         run: docker build -t first-pipeline:${{ github.sha }} .
@@ -48,8 +62,151 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
-      - name: Trigger Render deploy hook
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.RENDER_DEPLOY_HOOK_URL != ''
+  deploy-staging:
+    name: Deploy Staging
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    environment:
+      name: staging
+
+    steps:
+      - name: Trigger staging deploy hook
         env:
+          STAGING_DEPLOY_HOOK_URL: ${{ secrets.STAGING_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$STAGING_DEPLOY_HOOK_URL" ]; then
+            echo "STAGING_DEPLOY_HOOK_URL is not set. Skipping staging deploy."
+            exit 0
+          fi
+          curl -fsS -X POST "$STAGING_DEPLOY_HOOK_URL"
+
+      - name: Slack notify staging deploy success
+        if: success()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          COMMIT_MESSAGE: ${{ github.event.pull_request.title || 'N/A' }}
+          COMMIT_AUTHOR: ${{ github.event.pull_request.user.login || github.actor }}
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL is not set. Skipping Slack staging notification."
+            exit 0
+          fi
+
+          payload=$(jq -n \
+            --arg text "[SUCCESS] Staging deploy completed\nRepository: ${{ github.repository }}\nAuthor: $COMMIT_AUTHOR\nCommit: $COMMIT_SHA\nMessage: $COMMIT_MESSAGE\nRun: $RUN_URL" \
+            '{text: $text}')
+
+          curl -fsS -X POST \
+            -H "Content-type: application/json" \
+            --data "$payload" \
+            "$SLACK_WEBHOOK_URL"
+
+  chaos-staging:
+    name: Chaos Restart Staging
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: needs.deploy-staging.result == 'success'
+    environment:
+      name: staging
+
+    steps:
+      - name: Random chaos restart
+        env:
+          STAGING_DEPLOY_HOOK_URL: ${{ secrets.STAGING_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$STAGING_DEPLOY_HOOK_URL" ]; then
+            echo "STAGING_DEPLOY_HOOK_URL is not set. Skipping chaos restart."
+            exit 0
+          fi
+
+          RANDOM_FLAG=$((RANDOM % 2))
+          if [ "$RANDOM_FLAG" -eq 0 ]; then
+            echo "Chaos restart skipped this run."
+            exit 0
+          fi
+
+          echo "Chaos mode enabled. Restarting staging service."
+          curl -fsS -X POST "$STAGING_DEPLOY_HOOK_URL"
+          sleep 8
+          echo "Chaos restart completed."
+
+  deploy-production:
+    name: Deploy Production
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: production
+
+    steps:
+      - name: Trigger production deploy hook
+        env:
+          PRODUCTION_DEPLOY_HOOK_URL: ${{ secrets.PRODUCTION_DEPLOY_HOOK_URL }}
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
-        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
+        run: |
+          DEPLOY_URL="$PRODUCTION_DEPLOY_HOOK_URL"
+          if [ -z "$DEPLOY_URL" ]; then
+            DEPLOY_URL="$RENDER_DEPLOY_HOOK_URL"
+          fi
+
+          if [ -z "$DEPLOY_URL" ]; then
+            echo "No production deploy hook secret configured. Skipping production deploy."
+            exit 0
+          fi
+
+          curl -fsS -X POST "$DEPLOY_URL"
+
+      - name: Slack notify production deploy success
+        if: success()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || 'N/A' }}
+          COMMIT_AUTHOR: ${{ github.event.head_commit.author.name || github.actor }}
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL is not set. Skipping Slack production success notification."
+            exit 0
+          fi
+
+          payload=$(jq -n \
+            --arg text "[SUCCESS] Production deploy completed\nRepository: ${{ github.repository }}\nAuthor: $COMMIT_AUTHOR\nCommit: $COMMIT_SHA\nMessage: $COMMIT_MESSAGE\nRun: $RUN_URL" \
+            '{text: $text}')
+
+          curl -fsS -X POST \
+            -H "Content-type: application/json" \
+            --data "$payload" \
+            "$SLACK_WEBHOOK_URL"
+
+  notify-pipeline-failure:
+    name: Notify Pipeline Failure
+    runs-on: ubuntu-latest
+    needs: [ci, deploy-staging, chaos-staging, deploy-production]
+    if: always() && (needs.ci.result == 'failure' || needs.deploy-staging.result == 'failure' || needs.chaos-staging.result == 'failure' || needs.deploy-production.result == 'failure')
+
+    steps:
+      - name: Slack notify failure
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || github.event.pull_request.title || 'N/A' }}
+          COMMIT_AUTHOR: ${{ github.event.head_commit.author.name || github.event.pull_request.user.login || github.actor }}
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL is not set. Skipping Slack failure notification."
+            exit 0
+          fi
+
+          payload=$(jq -n \
+            --arg text "[ALERT] Pipeline failed\nRepository: ${{ github.repository }}\nAuthor: $COMMIT_AUTHOR\nCommit: $COMMIT_SHA\nMessage: $COMMIT_MESSAGE\nRun: $RUN_URL" \
+            '{text: $text}')
+
+          curl -fsS -X POST \
+            -H "Content-type: application/json" \
+            --data "$payload" \
+            "$SLACK_WEBHOOK_URL"
