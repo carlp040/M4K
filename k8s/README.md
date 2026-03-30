@@ -41,6 +41,7 @@ curl http://localhost:8080/status
 curl http://localhost:8080/health
 curl http://localhost:8080/metrics
 curl http://localhost:8080/db-status
+curl http://localhost:8080/mongo-proof
 curl http://localhost:8080/k8s
 ```
 

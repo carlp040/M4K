@@ -34,6 +34,7 @@ flowchart LR
 - `GET /health` -> health check + uptime
 - `GET /metrics` -> request count and average response time metrics
 - `GET /db-status` -> MongoDB connection and persistence status
+- `GET /mongo-proof` -> writes and reads a counter in MongoDB (live DB proof)
 - `GET /k8s` -> runtime proof (pod, namespace, node, kubernetes API host)
 
 ## Kubernetes
@@ -58,6 +59,7 @@ Proof for teacher:
 kubectl get deploy,sts,svc,pods -n m4k-pipeline -o wide
 kubectl port-forward svc/frontend 8080:80 -n m4k-pipeline
 curl http://localhost:8080/k8s
+curl http://localhost:8080/mongo-proof
 ```
 
 ## Pipeline Demo GIF

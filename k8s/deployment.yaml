@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: first-pipeline
-          image: first-pipeline:k8s-v8
+          image: first-pipeline:k8s-v10
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000

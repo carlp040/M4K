@@ -1,7 +1,7 @@
 param(
   [string]$ClusterName = "m4k",
   [string]$Namespace = "m4k-pipeline",
-  [string]$ImageTag = "k8s-v8"
+  [string]$ImageTag = "k8s-v10"
 )
 
 $ErrorActionPreference = "Stop"

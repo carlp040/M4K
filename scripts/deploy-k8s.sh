@@ -3,7 +3,7 @@ set -euo pipefail
 
 CLUSTER_NAME="${1:-m4k}"
 NAMESPACE="${2:-m4k-pipeline}"
-IMAGE_TAG="${3:-k8s-v8}"
+IMAGE_TAG="${3:-k8s-v10}"
 IMAGE="first-pipeline:${IMAGE_TAG}"
 
 echo "Building image ${IMAGE} ..."

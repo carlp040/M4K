@@ -9,6 +9,7 @@ const CHECKLIST_PATH = path.join(__dirname, "mission_challenges_checklist.txt");
 const MONGO_URL = process.env.MONGO_URL || "";
 const MONGO_DB_NAME = process.env.MONGO_DB_NAME || "m4kdb";
 const MONGO_METRICS_COLLECTION = "runtime_metrics";
+const MONGO_PROOF_COLLECTION = "proof_counter";
 
 const metrics = {
   totalRequests: 0,
@@ -18,6 +19,7 @@ const metrics = {
 
 let mongoClient = null;
 let mongoMetricsCollection = null;
+let mongoProofCollection = null;
 let mongoConnected = false;
 let mongoInitStarted = false;
 let metricsPersistTimer = null;
@@ -86,6 +88,7 @@ async function initMongoIfConfigured() {
 
     const db = mongoClient.db(MONGO_DB_NAME);
     mongoMetricsCollection = db.collection(MONGO_METRICS_COLLECTION);
+    mongoProofCollection = db.collection(MONGO_PROOF_COLLECTION);
     mongoConnected = true;
 
     const persistedMetrics = await mongoMetricsCollection.findOne({ _id: "service-metrics" });
@@ -281,8 +284,68 @@ app.get("/db-status", (req, res) => {
     mongoConfigured: Boolean(MONGO_URL),
     mongoConnected,
     database: MONGO_DB_NAME,
-    collection: MONGO_METRICS_COLLECTION
+    collections: [MONGO_METRICS_COLLECTION, MONGO_PROOF_COLLECTION]
   });
+});
+
+app.get("/mongo-proof", async (req, res) => {
+  if (!mongoProofCollection) {
+    return res.status(503).json({
+      ok: false,
+      mongoConfigured: Boolean(MONGO_URL),
+      mongoConnected: false,
+      message: "MongoDB proof is unavailable (database not connected)."
+    });
+  }
+
+  try {
+    const mode = req.query.mode === "read" ? "read" : "write";
+
+    if (mode === "write") {
+      await mongoProofCollection.updateOne(
+        { _id: "proof-counter" },
+        {
+          $inc: { hits: 1 },
+          $set: {
+            lastPod: process.env.POD_NAME || "not-set",
+            lastNamespace: process.env.POD_NAMESPACE || "not-set",
+            updatedAt: new Date()
+          }
+        },
+        { upsert: true }
+      );
+    }
+
+    const proofDoc =
+      (await mongoProofCollection.findOne({ _id: "proof-counter" })) || {
+        hits: 0,
+        lastPod: "not-set",
+        lastNamespace: "not-set",
+        updatedAt: null
+      };
+    mongoConnected = true;
+
+    return res.json({
+      ok: true,
+      mode,
+      message: mode === "write" ? "MongoDB write+read succeeded." : "MongoDB read succeeded.",
+      proof: {
+        hits: proofDoc?.hits || 0,
+        lastPod: proofDoc?.lastPod || "not-set",
+        lastNamespace: proofDoc?.lastNamespace || "not-set",
+        updatedAt: proofDoc?.updatedAt || null
+      }
+    });
+  } catch (error) {
+    mongoConnected = false;
+    return res.status(500).json({
+      ok: false,
+      mongoConfigured: Boolean(MONGO_URL),
+      mongoConnected,
+      message: "MongoDB proof failed.",
+      error: error.message
+    });
+  }
 });
 
 app.get("/secret", (req, res) => {
@@ -305,7 +368,7 @@ app.get("/coffee", (req, res) => {
 
 app.get("/", (req, res) => {
   const now = new Date().toISOString();
-  const host = req.get("host");
+  const host = req.get("x-forwarded-host") || req.get("host");
   const baseUrl = `${req.protocol}://${host}`;
   const repoUrl = "https://github.com/PalmChas/M4K-Pipeline";
   const actionsUrl = "https://github.com/PalmChas/M4K-Pipeline/actions/workflows/pipeline.yml";
@@ -519,6 +582,41 @@ app.get("/", (req, res) => {
             font-size: 0.82rem;
             overflow-x: auto;
           }
+          .proof-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 10px;
+            margin-top: 8px;
+          }
+          .proof-badge {
+            display: inline-block;
+            margin-top: 6px;
+            border-radius: 999px;
+            padding: 3px 9px;
+            font-size: 0.78rem;
+            font-weight: 700;
+          }
+          .proof-badge.ok {
+            background: #dcfce7;
+            color: #166534;
+          }
+          .proof-badge.bad {
+            background: #fee2e2;
+            color: #991b1b;
+          }
+          .btn {
+            margin-top: 10px;
+            border: 1px solid #1d4ed8;
+            background: #1d4ed8;
+            color: #fff;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-weight: 600;
+            cursor: pointer;
+          }
+          .btn:hover {
+            filter: brightness(0.95);
+          }
         </style>
       </head>
       <body>
@@ -549,6 +647,7 @@ app.get("/", (req, res) => {
                 <li><a href="${baseUrl}/metrics/prometheus">${baseUrl}/metrics/prometheus</a></li>
                 <li><a href="${baseUrl}/k8s">${baseUrl}/k8s</a></li>
                 <li><a href="${baseUrl}/db-status">${baseUrl}/db-status</a></li>
+                <li><a href="${baseUrl}/mongo-proof">${baseUrl}/mongo-proof</a></li>
                 <li><a href="${baseUrl}/secret">${baseUrl}/secret</a></li>
                 <li><a href="${baseUrl}/coffee">${baseUrl}/coffee</a></li>
               </ul>
@@ -603,6 +702,31 @@ app.get("/", (req, res) => {
                 </div>
               </div>
             </article>
+
+            <article class="card">
+              <span class="badge">Teacher Demo</span>
+              <h2>K8s + MongoDB Proof</h2>
+              <p class="small">One-click demo: verify runtime in Kubernetes and prove MongoDB write/read.</p>
+              <div class="proof-row">
+                <div class="stat">
+                  <strong id="proof-k8s-value">Checking...</strong>
+                  Kubernetes runtime
+                  <span id="proof-k8s-badge" class="proof-badge">...</span>
+                </div>
+                <div class="stat">
+                  <strong id="proof-db-value">Checking...</strong>
+                  MongoDB connection
+                  <span id="proof-db-badge" class="proof-badge">...</span>
+                </div>
+                <div class="stat">
+                  <strong id="proof-hits">0</strong>
+                  Mongo proof counter
+                  <span id="proof-mode" class="proof-badge">read</span>
+                </div>
+              </div>
+              <button id="proof-run" class="btn" type="button">Run Mongo Proof (Write + Read)</button>
+              <div class="json-box" id="proof-json">Loading proof data...</div>
+            </article>
           </section>
 
           <section class="card section">
@@ -650,6 +774,7 @@ curl ${baseUrl}/health
 curl ${baseUrl}/metrics
 curl ${baseUrl}/metrics/prometheus
 curl ${baseUrl}/db-status
+curl ${baseUrl}/mongo-proof
 curl ${baseUrl}/secret</pre>
               <p class="small">For local Trivy report: <code>trivy-report.txt</code>.</p>
             </article>
@@ -694,13 +819,83 @@ curl ${baseUrl}/secret</pre>
             }
           }
 
+          function setProofBadge(id, ok, text) {
+            const el = document.getElementById(id);
+            el.textContent = text;
+            el.className = ok ? "proof-badge ok" : "proof-badge bad";
+          }
+
+          async function refreshProofPanel() {
+            const jsonEl = document.getElementById("proof-json");
+
+            try {
+              const [k8sRes, dbRes, proofRes] = await Promise.all([
+                fetch("/k8s", { cache: "no-store" }),
+                fetch("/db-status", { cache: "no-store" }),
+                fetch("/mongo-proof?mode=read", { cache: "no-store" })
+              ]);
+
+              const k8s = await k8sRes.json();
+              const db = await dbRes.json();
+              const proof = await proofRes.json();
+
+              document.getElementById("proof-k8s-value").textContent = k8s.inKubernetes ? "Detected" : "Not detected";
+              setProofBadge("proof-k8s-badge", Boolean(k8s.inKubernetes), k8s.inKubernetes ? "OK" : "Missing");
+
+              const dbOk = Boolean(db.mongoConfigured && db.mongoConnected);
+              document.getElementById("proof-db-value").textContent = dbOk ? "Connected" : "Not connected";
+              setProofBadge("proof-db-badge", dbOk, dbOk ? "OK" : "Missing");
+
+              const hits = proof?.proof?.hits ?? 0;
+              document.getElementById("proof-hits").textContent = String(hits);
+              const mode = proof?.mode || "read";
+              document.getElementById("proof-mode").textContent = mode;
+              document.getElementById("proof-mode").className = mode === "write" ? "proof-badge ok" : "proof-badge";
+
+              jsonEl.textContent = JSON.stringify({ k8s, db, proof }, null, 2);
+            } catch (error) {
+              jsonEl.textContent = String(error.message || error);
+              setProofBadge("proof-k8s-badge", false, "Error");
+              setProofBadge("proof-db-badge", false, "Error");
+            }
+          }
+
+          async function runMongoProof() {
+            const button = document.getElementById("proof-run");
+            const jsonEl = document.getElementById("proof-json");
+
+            button.disabled = true;
+            button.textContent = "Running proof...";
+            try {
+              const response = await fetch("/mongo-proof", { cache: "no-store" });
+              const proof = await response.json();
+              jsonEl.textContent = JSON.stringify(proof, null, 2);
+              if (proof?.proof?.hits !== undefined) {
+                document.getElementById("proof-hits").textContent = String(proof.proof.hits);
+              }
+              document.getElementById("proof-mode").textContent = proof?.mode || "write";
+              document.getElementById("proof-mode").className = response.ok ? "proof-badge ok" : "proof-badge bad";
+            } catch (error) {
+              jsonEl.textContent = String(error.message || error);
+              document.getElementById("proof-mode").textContent = "error";
+              document.getElementById("proof-mode").className = "proof-badge bad";
+            } finally {
+              button.disabled = false;
+              button.textContent = "Run Mongo Proof (Write + Read)";
+              refreshProofPanel();
+            }
+          }
+
           function refreshLiveChecks() {
             updateCheck("/status", "status-pill", "status-code", "status-json");
             updateCheck("/health", "health-pill", "health-code", "health-json");
           }
 
+          document.getElementById("proof-run").addEventListener("click", runMongoProof);
           refreshLiveChecks();
+          refreshProofPanel();
           setInterval(refreshLiveChecks, 15000);
+          setInterval(refreshProofPanel, 15000);
         </script>
       </body>
     </html>
